@@ -1,13 +1,16 @@
-using System.Globalization;
+using LoupixDeck.Plugin.HwInfo.Rendering;
 using LoupixDeck.PluginSdk;
 
 namespace LoupixDeck.Plugin.HwInfo;
 
 /// <summary>
-/// Display command that renders a single HWiNFO sensor reading onto a touch
-/// button. The command name is kept identical to the former built-in command.
+/// Display command that renders HWiNFO readings onto a touch button (90×90) via the SDK
+/// image-rendering API. One command carries one sensor; a button's command sequence composes the
+/// tile dynamically — the first (rendering) command reads <see cref="CommandContext.SequenceCommands"/>
+/// and draws one row per sibling command (up to four). The command name and the "Sensor" parameter
+/// (the stable HWiNFO triple) are unchanged, so buttons saved before the rework keep working.
 /// </summary>
-internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayCommand
+internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayImageCommand
 {
     public CommandDescriptor Descriptor { get; } = new()
     {
@@ -24,50 +27,45 @@ internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayComman
 
     public TimeSpan UpdateInterval => TimeSpan.FromSeconds(2);
 
-    public string GetText(CommandContext ctx)
+    public bool RenderImage(CommandContext ctx, IRenderCanvas canvas)
     {
-        if (!hwInfo.IsAvailable)
-            return "N/A";
+        bool transparent = ctx.Host.Settings.Get(HwInfoPlugin.TransparentBackgroundKey, false);
 
-        var parameters = ctx.Parameters;
-        if (parameters is not { Length: >= 1 } || string.IsNullOrWhiteSpace(parameters[0]))
-            return "?";
+        List<SensorReading> readings = [];
+        foreach (string? sensorRef in SensorReferences(ctx))
+        {
+            readings.Add(HwInfoReadingBuilder.Build(sensorRef, hwInfo.Sensors, hwInfo.IsAvailable));
+            if (readings.Count >= SensorRenderer.MaxReadings)
+                break;
+        }
 
-        if (!TryParseSensorRef(parameters[0], out var sensorId, out var sensorInstance, out var readingId))
-            return "?";
+        SensorRenderer.Render(canvas, readings, transparent ? SensorTheme.Transparent : SensorTheme.Default);
+        return true;
+    }
 
-        var sensor = hwInfo.Sensors.FirstOrDefault(s =>
-            s.SensorId == sensorId && s.SensorInstance == sensorInstance && s.ReadingId == readingId);
-        if (sensor is null)
-            return "?";
+    /// <summary>
+    /// The sensor references to render, in order. On a multi-command button the whole sequence is
+    /// available: take the "Sensor" parameter of every sibling that is also a HwInfo.Sensor command
+    /// (non-HWiNFO commands in the sequence are ignored). A single-command button reports an empty
+    /// sequence, so fall back to this command's own parameter.
+    /// </summary>
+    private IEnumerable<string?> SensorReferences(CommandContext ctx)
+    {
+        if (ctx.SequenceCommands.Count > 0)
+        {
+            foreach (SequenceCommand command in ctx.SequenceCommands)
+            {
+                if (command.Name != Descriptor.CommandName)
+                    continue;
 
-        var unit = string.IsNullOrEmpty(sensor.Unit) ? string.Empty : " " + sensor.Unit;
-        return $"{sensor.Value:F1}{unit}";
+                yield return command.Parameters is { Length: >= 1 } ? command.Parameters[0] : null;
+            }
+
+            yield break;
+        }
+
+        yield return ctx.Parameters is { Length: >= 1 } ? ctx.Parameters[0] : null;
     }
 
     public Task Execute(CommandContext ctx) => Task.CompletedTask;
-
-    // Reference format: "sensorId:sensorInstance:readingId" — the triple HWiNFO keeps
-    // stable across runs. Values may be decimal or 0x-prefixed hex.
-    private static bool TryParseSensorRef(string raw, out uint sensorId, out uint sensorInstance, out uint readingId)
-    {
-        sensorId = 0;
-        sensorInstance = 0;
-        readingId = 0;
-
-        var parts = raw.Split(':', StringSplitOptions.TrimEntries);
-        if (parts.Length != 3)
-            return false;
-
-        return TryParseUInt(parts[0], out sensorId)
-               && TryParseUInt(parts[1], out sensorInstance)
-               && TryParseUInt(parts[2], out readingId);
-    }
-
-    private static bool TryParseUInt(string text, out uint value)
-    {
-        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            return uint.TryParse(text.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
-        return uint.TryParse(text, out value);
-    }
 }

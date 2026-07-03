@@ -8,21 +8,27 @@ namespace LoupixDeck.Plugin.HwInfo;
 /// </summary>
 public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettingsPage
 {
+    /// <summary>Settings key: when true, buttons are drawn without an opaque background so the page
+    /// wallpaper shows through. Read by the display command at render time.</summary>
+    public const string TransparentBackgroundKey = "background.transparent";
+
     private readonly HwInfoService _service = new();
     private List<IPluginCommand> _commands = [];
+    private IPluginHost? _host;
 
     public override PluginMetadata Metadata { get; } = new()
     {
         Id = "hwinfo",
         Name = "HWiNFO",
         Version = new Version(1, 0, 0),
-        SdkVersion = new Version(1, 1, 0),
+        SdkVersion = new Version(1, 15, 0),
         Author = "RadiatorTwo",
-        Description = "Display HWiNFO sensor readings on touch buttons via HWiNFO's shared-memory interface."
+        Description = "Display HWiNFO sensor readings on touch buttons; chain several to compose a multi-sensor tile."
     };
 
     public override void Initialize(IPluginHost host)
     {
+        _host = host;
         _commands = [new HwInfoSensorCommand(_service)];
         _service.Start();
     }
@@ -83,9 +89,20 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         return Task.FromResult(result);
     }
 
-    // ───────── IPluginSettingsPage — status only ─────────
+    // ───────── IPluginSettingsPage — transparency + status ─────────
 
-    public IReadOnlyList<PluginSettingDescriptor> SettingsSchema { get; } = [];
+    public IReadOnlyList<PluginSettingDescriptor> SettingsSchema { get; } =
+    [
+        new PluginSettingDescriptor
+        {
+            Key = TransparentBackgroundKey,
+            Label = "Transparent background",
+            Kind = PluginSettingKind.Toggle,
+            DefaultValue = false,
+            Description = "Draw buttons without an opaque background so the page wallpaper shows through. " +
+                          "Text is outlined for legibility."
+        }
+    ];
 
     public IReadOnlyList<PluginSettingAction> SettingsActions => _settingsActions ??=
     [
@@ -100,5 +117,8 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
 
     public void OnSettingsSaved()
     {
+        // Repaint bound touch buttons immediately so a transparency toggle is visible at once
+        // (otherwise it would only apply on the command's next poll).
+        _host?.RequestButtonRefresh("HwInfo.Sensor");
     }
 }
