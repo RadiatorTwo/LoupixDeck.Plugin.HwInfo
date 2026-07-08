@@ -21,7 +21,7 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         Id = "hwinfo",
         Name = "HWiNFO",
         Version = new Version(1, 0, 0),
-        SdkVersion = new Version(1, 15, 0),
+        SdkVersion = new Version(1, 16, 0),
         Author = "RadiatorTwo",
         Description = "Display HWiNFO sensor readings on touch buttons; chain several to compose a multi-sensor tile."
     };
@@ -36,6 +36,11 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     public override void Shutdown() => _service.Stop();
 
     public override IEnumerable<IPluginCommand> GetCommands() => _commands;
+
+    public override IReadOnlyList<CommandGroupDescriptor> GetCommandGroups() =>
+    [
+        new CommandGroupDescriptor { Group = "HWiNFO", Description = "System sensors and monitoring", Icon = "\U000F0379", Section = CommandGroupSection.Plugins }
+    ];
 
     // ───────── IMenuContributor — dynamic sensor tree ─────────
 

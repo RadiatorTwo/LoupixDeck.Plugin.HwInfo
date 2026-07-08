@@ -17,6 +17,8 @@ internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayImageC
         CommandName = "HwInfo.Sensor",
         DisplayName = "HWiNFO Sensor",
         Group = "HWiNFO",
+        Icon = "\U000F0379",
+        Description = "Render a live HWiNFO sensor reading on a touch button",
         ParameterTemplate = "({Sensor})",
         Parameters = [new CommandParameter("Sensor", typeof(string))],
         // Surfaced per sensor through the dynamic menu.
