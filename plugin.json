@@ -2,7 +2,9 @@
   "id": "hwinfo",
   "name": "HWiNFO",
   "version": "1.0.0",
-  "sdkVersion": "1.15",
+  "sdkVersion": "1.26",
   "entryAssembly": "LoupixDeck.Plugin.HwInfo.dll",
-  "platform": "Windows"
+  "platform": "Windows",
+  "author": "RadiatorTwo",
+  "description": "Display HWiNFO sensor readings on touch buttons; chain several to compose a multi-sensor tile."
 }
