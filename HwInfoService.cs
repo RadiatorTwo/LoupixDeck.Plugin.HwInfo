@@ -23,14 +23,14 @@ namespace LoupixDeck.Plugin.HwInfo;
 ///   HWiNFO_SENSORS_SENSOR_ELEMENT      (dwSizeOfSensorElement bytes, 264 or larger)
 ///     +  0  dwSensorID                   u32
 ///     +  4  dwSensorInst                 u32
-///     +  8  szSensorNameOrig             char[128]
+///     +  8  szSensorNameOrig             char[128]   (HWiNFO's English name)
 ///     +136  szSensorNameUser             char[128]
 ///     +264  (newer builds append a UTF-8 copy of the user name)
 ///   HWiNFO_SENSORS_READING_ELEMENT     (dwSizeOfReadingElement bytes, 316 or larger)
 ///     +  0  tReading                     u32   (SENSOR_READING_TYPE)
 ///     +  4  dwSensorIndex                u32   (index into the sensor section)
 ///     +  8  dwReadingID                  u32
-///     + 12  szLabelOrig                  char[128]
+///     + 12  szLabelOrig                  char[128]   (HWiNFO's English label)
 ///     +140  szLabelUser                  char[128]   (system code page)
 ///     +268  szUnit                       char[16]
 ///     +284  Value / ValueMin / ValueMax / ValueAvg  4 * f64
@@ -58,12 +58,14 @@ public sealed class HwInfoService : IDisposable
     private const int OffsetReadingCount = 40;
 
     // Offsets inside a sensor element.
+    private const int SensorNameOrigOffset = 8;
     private const int SensorNameUserOffset = 136;
     private const int SensorNameLen = 128;
 
     // Offsets inside a reading element (the trailing doubles are derived from element size).
     private const int ReadingSensorIndexOffset = 4;
     private const int ReadingIdOffset = 8;
+    private const int ReadingLabelOrigOffset = 12;
     private const int ReadingLabelUserOffset = 140;
     private const int ReadingLabelLen = 128;
     private const int ReadingUnitOffset = 268;
@@ -246,15 +248,16 @@ public sealed class HwInfoService : IDisposable
                 return false;
             }
 
-            // Parent sensor section: (id, instance, user name) per group.
-            var sensorGroups = new (uint Id, uint Instance, string Name)[sensorCount];
+            // Parent sensor section: (id, instance, user name, original name) per group.
+            var sensorGroups = new (uint Id, uint Instance, string Name, string OrigName)[sensorCount];
             for (var i = 0; i < sensorCount; i++)
             {
                 var elem = view.Slice(sensorOffset + i * sensorElemSize, sensorElemSize);
                 sensorGroups[i] = (
                     BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(0, 4)),
                     BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(4, 4)),
-                    ReadAnsiString(elem.Slice(SensorNameUserOffset, SensorNameLen)));
+                    ReadAnsiString(elem.Slice(SensorNameUserOffset, SensorNameLen)),
+                    ReadAnsiString(elem.Slice(SensorNameOrigOffset, SensorNameLen)));
             }
 
             var list = new List<HwInfoSensor>(readingCount);
@@ -266,6 +269,7 @@ public sealed class HwInfoService : IDisposable
                 var sensorIndex = (int)BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(ReadingSensorIndexOffset, 4));
                 var readingId = BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(ReadingIdOffset, 4));
                 var label = ReadAnsiString(elem.Slice(ReadingLabelUserOffset, ReadingLabelLen));
+                var labelOrig = ReadAnsiString(elem.Slice(ReadingLabelOrigOffset, ReadingLabelLen));
                 var unit = ReadAnsiString(elem.Slice(ReadingUnitOffset, ReadingUnitLen));
                 var value = BinaryPrimitives.ReadDoubleLittleEndian(elem.Slice(ReadingValueOffset, 8));
                 var valueMin = BinaryPrimitives.ReadDoubleLittleEndian(elem.Slice(ReadingValueOffset + 8, 8));
@@ -274,12 +278,13 @@ public sealed class HwInfoService : IDisposable
 
                 var group = sensorIndex >= 0 && sensorIndex < sensorCount
                     ? sensorGroups[sensorIndex]
-                    : (Id: 0u, Instance: 0u, Name: string.Empty);
+                    : (Id: 0u, Instance: 0u, Name: string.Empty, OrigName: string.Empty);
 
                 list.Add(new HwInfoSensor(
                     type, group.Name, label, unit,
                     value, valueMin, valueMax, valueAvg,
-                    group.Id, group.Instance, readingId));
+                    group.Id, group.Instance, readingId,
+                    group.OrigName, labelOrig));
             }
 
             _lastPollTime = pollTime;
