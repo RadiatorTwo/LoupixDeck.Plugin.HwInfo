@@ -85,35 +85,9 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         {
             groupChildren.Add(new MenuNode { Name = "Pages", Children = PageNodes() });
 
-            // HWiNFO's natural grouping is the parent sensor (CPU, GPU, a drive, …).
-            foreach (var sensorGroup in sensors
-                         .GroupBy(s => new { s.SensorId, s.SensorInstance, s.SensorName })
-                         .OrderBy(g => g.Key.SensorName))
-            {
-                var name = string.IsNullOrWhiteSpace(sensorGroup.Key.SensorName)
-                    ? $"Sensor 0x{sensorGroup.Key.SensorId:X}"
-                    : sensorGroup.Key.SensorName;
-
-                var readings = new List<MenuNode>();
-                foreach (var sensor in sensorGroup.OrderBy(s => s.ReadingId))
-                {
-                    var label = string.IsNullOrWhiteSpace(sensor.Label)
-                        ? $"#{sensor.ReadingId}"
-                        : sensor.Label;
-
-                    readings.Add(new MenuNode
-                    {
-                        Name = label,
-                        CommandName = HwInfoSensorCommand.CommandName,
-                        Parameters = new Dictionary<string, string>
-                        {
-                            { "Sensor", $"{sensor.SensorId}:{sensor.SensorInstance}:{sensor.ReadingId}" }
-                        }
-                    });
-                }
-
-                groupChildren.Add(new MenuNode { Name = name, Children = readings });
-            }
+            // One entry per reading (one command each), sorted by component, device and quantity.
+            // Combine several on a button via its command sequence to get a multi-row tile.
+            groupChildren.AddRange(SensorMenu.Build(sensors));
         }
 
         IReadOnlyList<MenuNode> result = [new MenuNode { Name = "HWiNFO", Children = groupChildren }];
