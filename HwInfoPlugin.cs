@@ -21,7 +21,7 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         Id = "hwinfo",
         Name = "HWiNFO",
         Version = new Version(1, 0, 0),
-        SdkVersion = new Version(1, 16, 0),
+        SdkVersion = new Version(1, 26, 0),
         Author = "RadiatorTwo",
         Description = "Display HWiNFO sensor readings on touch buttons; chain several to compose a multi-sensor tile."
     };
