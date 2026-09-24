@@ -96,18 +96,23 @@ public sealed class HwInfoService : IDisposable
     private long _lastChangeTicks;
 
     private volatile IReadOnlyList<HwInfoSensor> _sensors = Array.Empty<HwInfoSensor>();
-    private volatile string _diagnostics = "Not started";
+    private volatile HwInfoDiagnostics _diagnostics = new("Not started", []);
 
     public IReadOnlyList<HwInfoSensor> Sensors => _sensors;
     public bool IsAvailable => _accessor != null;
-    public string Diagnostics => _diagnostics;
+    public string Diagnostics => _diagnostics.Text;
+
+    /// <summary>The status as a format string and its arguments, so the host can translate it.</summary>
+    public HwInfoDiagnostics Status => _diagnostics;
+
     public event Action? SnapshotUpdated;
 
-    private void SetDiagnostics(string text)
+    private void SetDiagnostics(string format, params object[] args)
     {
-        if (_diagnostics == text)
+        HwInfoDiagnostics diagnostics = new(format, args);
+        if (_diagnostics.Text == diagnostics.Text)
             return;
-        _diagnostics = text;
+        _diagnostics = diagnostics;
         SnapshotUpdated?.Invoke();
     }
 
@@ -169,7 +174,7 @@ public sealed class HwInfoService : IDisposable
             }
             catch (Exception ex)
             {
-                SetDiagnostics($"Snapshot failed ({ex.GetType().Name}: {ex.Message}).");
+                SetDiagnostics("Snapshot failed ({0}: {1}).", ex.GetType().Name, ex.Message);
                 Console.WriteLine($"HwInfoService: snapshot failed, will reconnect ({ex}).");
                 Close();
             }
@@ -226,7 +231,7 @@ public sealed class HwInfoService : IDisposable
             var signature = BinaryPrimitives.ReadUInt32LittleEndian(view.Slice(0, 4));
             if (signature != ValidSignature)
             {
-                SetDiagnostics($"Bad signature 0x{signature:X8} (expected 0x{ValidSignature:X8}).");
+                SetDiagnostics("Bad signature 0x{0:X8} (expected 0x{1:X8}).", signature, ValidSignature);
                 return false;
             }
 
@@ -247,18 +252,18 @@ public sealed class HwInfoService : IDisposable
             if (sensorElemSize < SensorNameUserOffset + SensorNameLen ||
                 readingElemSize < ReadingUnitOffset + ReadingUnitLen + 32)
             {
-                SetDiagnostics($"Unexpected element size — {headerInfo}");
+                SetDiagnostics("Unexpected element size — {0}", headerInfo);
                 return false;
             }
             if (sensorCount is < 0 or > MaxElements || readingCount is < 0 or > MaxElements)
             {
-                SetDiagnostics($"Element count out of range — {headerInfo}");
+                SetDiagnostics("Element count out of range — {0}", headerInfo);
                 return false;
             }
             if (sensorOffset + (long)sensorCount * sensorElemSize > capacity ||
                 readingOffset + (long)readingCount * readingElemSize > capacity)
             {
-                SetDiagnostics($"Section exceeds mapping — {headerInfo}");
+                SetDiagnostics("Section exceeds mapping — {0}", headerInfo);
                 return false;
             }
 
@@ -303,7 +308,7 @@ public sealed class HwInfoService : IDisposable
 
             _lastPollTime = pollTime;
             sensors = list;
-            SetDiagnostics($"OK — {list.Count} readings, {sensorCount} sensors ({headerInfo}).");
+            SetDiagnostics("OK — {0} readings, {1} sensors ({2}).", list.Count, sensorCount, headerInfo);
             return true;
         }
         finally
@@ -320,4 +325,11 @@ public sealed class HwInfoService : IDisposable
             end = bytes.Length;
         return Encoding.Latin1.GetString(bytes.Slice(0, end));
     }
+}
+
+/// <summary>A status message of <see cref="HwInfoService"/>: an English format string and its
+/// arguments.</summary>
+public sealed record HwInfoDiagnostics(string Format, object[] Args)
+{
+    public string Text => string.Format(System.Globalization.CultureInfo.InvariantCulture, Format, Args);
 }

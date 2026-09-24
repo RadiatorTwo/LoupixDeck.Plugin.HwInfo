@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using LoupixDeck.Plugin.HwInfo.Rendering.Tiles;
 using LoupixDeck.Plugin.HwInfo.Telemetry;
 using LoupixDeck.PluginSdk;
@@ -143,11 +144,34 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         new PluginSettingAction
         {
             Label = "Show Status",
-            Invoke = () => Task.FromResult(_service.Diagnostics)
+            Invoke = () =>
+            {
+                HwInfoDiagnostics status = _service.Status;
+                return Task.FromResult(string.Format(Tr(status.Format), status.Args));
+            }
         }
     ];
 
     private IReadOnlyList<PluginSettingAction>? _settingsActions;
+
+    /// <summary>Translates runtime text through the plugin's strings files; hosts before SDK 1.24
+    /// have no <see cref="IPluginHost.Tr"/> and get the English text.</summary>
+    private string Tr(string english)
+    {
+        try
+        {
+            return _host is null ? english : HostTr(_host, english);
+        }
+        catch (MissingMethodException)
+        {
+            return english;
+        }
+    }
+
+    // Kept out of line: the JIT resolves IPluginHost.Tr when it compiles this method, which throws
+    // on a host without it — inside Tr's try block rather than in its caller.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string HostTr(IPluginHost host, string english) => host.Tr(english);
 
     public void OnSettingsSaved()
     {
