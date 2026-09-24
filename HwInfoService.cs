@@ -23,14 +23,14 @@ namespace LoupixDeck.Plugin.HwInfo;
 ///   HWiNFO_SENSORS_SENSOR_ELEMENT      (dwSizeOfSensorElement bytes, 264 or larger)
 ///     +  0  dwSensorID                   u32
 ///     +  4  dwSensorInst                 u32
-///     +  8  szSensorNameOrig             char[128]
+///     +  8  szSensorNameOrig             char[128]   (HWiNFO's English name)
 ///     +136  szSensorNameUser             char[128]
 ///     +264  (newer builds append a UTF-8 copy of the user name)
 ///   HWiNFO_SENSORS_READING_ELEMENT     (dwSizeOfReadingElement bytes, 316 or larger)
 ///     +  0  tReading                     u32   (SENSOR_READING_TYPE)
 ///     +  4  dwSensorIndex                u32   (index into the sensor section)
 ///     +  8  dwReadingID                  u32
-///     + 12  szLabelOrig                  char[128]
+///     + 12  szLabelOrig                  char[128]   (HWiNFO's English label)
 ///     +140  szLabelUser                  char[128]   (system code page)
 ///     +268  szUnit                       char[16]
 ///     +284  Value / ValueMin / ValueMax / ValueAvg  4 * f64
@@ -58,12 +58,14 @@ public sealed class HwInfoService : IDisposable
     private const int OffsetReadingCount = 40;
 
     // Offsets inside a sensor element.
+    private const int SensorNameOrigOffset = 8;
     private const int SensorNameUserOffset = 136;
     private const int SensorNameLen = 128;
 
     // Offsets inside a reading element (the trailing doubles are derived from element size).
     private const int ReadingSensorIndexOffset = 4;
     private const int ReadingIdOffset = 8;
+    private const int ReadingLabelOrigOffset = 12;
     private const int ReadingLabelUserOffset = 140;
     private const int ReadingLabelLen = 128;
     private const int ReadingUnitOffset = 268;
@@ -79,6 +81,11 @@ public sealed class HwInfoService : IDisposable
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(2);
     // Poll cadence when connected — only an 8-byte read happens while poll_time is unchanged.
     private static readonly TimeSpan PollDelay = TimeSpan.FromMilliseconds(250);
+    // Holding the mapping open keeps it alive after HWiNFO exits, frozen at its last poll. A
+    // poll_time that has not moved for this long means HWiNFO is gone (or its shared memory was
+    // switched off): the mapping is released and reopened, which fails once HWiNFO has really exited.
+    // Well above HWiNFO's polling period, which users can raise to a few seconds.
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(15);
 
     private MemoryMappedFile? _mmf;
     private MemoryMappedViewAccessor? _accessor;
@@ -86,20 +93,26 @@ public sealed class HwInfoService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
     private long _lastPollTime;
+    private long _lastChangeTicks;
 
     private volatile IReadOnlyList<HwInfoSensor> _sensors = Array.Empty<HwInfoSensor>();
-    private volatile string _diagnostics = "Not started";
+    private volatile HwInfoDiagnostics _diagnostics = new("Not started", []);
 
     public IReadOnlyList<HwInfoSensor> Sensors => _sensors;
     public bool IsAvailable => _accessor != null;
-    public string Diagnostics => _diagnostics;
+    public string Diagnostics => _diagnostics.Text;
+
+    /// <summary>The status as a format string and its arguments, so the host can translate it.</summary>
+    public HwInfoDiagnostics Status => _diagnostics;
+
     public event Action? SnapshotUpdated;
 
-    private void SetDiagnostics(string text)
+    private void SetDiagnostics(string format, params object[] args)
     {
-        if (_diagnostics == text)
+        HwInfoDiagnostics diagnostics = new(format, args);
+        if (_diagnostics.Text == diagnostics.Text)
             return;
-        _diagnostics = text;
+        _diagnostics = diagnostics;
         SnapshotUpdated?.Invoke();
     }
 
@@ -141,6 +154,7 @@ public sealed class HwInfoService : IDisposable
                     continue;
                 }
                 _lastPollTime = 0;
+                _lastChangeTicks = Environment.TickCount64;
             }
 
             try
@@ -148,12 +162,19 @@ public sealed class HwInfoService : IDisposable
                 if (TrySnapshot(out var snapshot))
                 {
                     _sensors = snapshot!;
+                    _lastChangeTicks = Environment.TickCount64;
                     SnapshotUpdated?.Invoke();
+                }
+                else if (Environment.TickCount64 - _lastChangeTicks > StaleAfter.TotalMilliseconds)
+                {
+                    SetDiagnostics("No new data from HWiNFO — reconnecting.");
+                    Close();
+                    continue;
                 }
             }
             catch (Exception ex)
             {
-                SetDiagnostics($"Snapshot failed ({ex.GetType().Name}: {ex.Message}).");
+                SetDiagnostics("Snapshot failed ({0}: {1}).", ex.GetType().Name, ex.Message);
                 Console.WriteLine($"HwInfoService: snapshot failed, will reconnect ({ex}).");
                 Close();
             }
@@ -210,7 +231,7 @@ public sealed class HwInfoService : IDisposable
             var signature = BinaryPrimitives.ReadUInt32LittleEndian(view.Slice(0, 4));
             if (signature != ValidSignature)
             {
-                SetDiagnostics($"Bad signature 0x{signature:X8} (expected 0x{ValidSignature:X8}).");
+                SetDiagnostics("Bad signature 0x{0:X8} (expected 0x{1:X8}).", signature, ValidSignature);
                 return false;
             }
 
@@ -231,30 +252,31 @@ public sealed class HwInfoService : IDisposable
             if (sensorElemSize < SensorNameUserOffset + SensorNameLen ||
                 readingElemSize < ReadingUnitOffset + ReadingUnitLen + 32)
             {
-                SetDiagnostics($"Unexpected element size — {headerInfo}");
+                SetDiagnostics("Unexpected element size — {0}", headerInfo);
                 return false;
             }
             if (sensorCount is < 0 or > MaxElements || readingCount is < 0 or > MaxElements)
             {
-                SetDiagnostics($"Element count out of range — {headerInfo}");
+                SetDiagnostics("Element count out of range — {0}", headerInfo);
                 return false;
             }
             if (sensorOffset + (long)sensorCount * sensorElemSize > capacity ||
                 readingOffset + (long)readingCount * readingElemSize > capacity)
             {
-                SetDiagnostics($"Section exceeds mapping — {headerInfo}");
+                SetDiagnostics("Section exceeds mapping — {0}", headerInfo);
                 return false;
             }
 
-            // Parent sensor section: (id, instance, user name) per group.
-            var sensorGroups = new (uint Id, uint Instance, string Name)[sensorCount];
+            // Parent sensor section: (id, instance, user name, original name) per group.
+            var sensorGroups = new (uint Id, uint Instance, string Name, string OrigName)[sensorCount];
             for (var i = 0; i < sensorCount; i++)
             {
                 var elem = view.Slice(sensorOffset + i * sensorElemSize, sensorElemSize);
                 sensorGroups[i] = (
                     BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(0, 4)),
                     BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(4, 4)),
-                    ReadAnsiString(elem.Slice(SensorNameUserOffset, SensorNameLen)));
+                    ReadAnsiString(elem.Slice(SensorNameUserOffset, SensorNameLen)),
+                    ReadAnsiString(elem.Slice(SensorNameOrigOffset, SensorNameLen)));
             }
 
             var list = new List<HwInfoSensor>(readingCount);
@@ -266,6 +288,7 @@ public sealed class HwInfoService : IDisposable
                 var sensorIndex = (int)BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(ReadingSensorIndexOffset, 4));
                 var readingId = BinaryPrimitives.ReadUInt32LittleEndian(elem.Slice(ReadingIdOffset, 4));
                 var label = ReadAnsiString(elem.Slice(ReadingLabelUserOffset, ReadingLabelLen));
+                var labelOrig = ReadAnsiString(elem.Slice(ReadingLabelOrigOffset, ReadingLabelLen));
                 var unit = ReadAnsiString(elem.Slice(ReadingUnitOffset, ReadingUnitLen));
                 var value = BinaryPrimitives.ReadDoubleLittleEndian(elem.Slice(ReadingValueOffset, 8));
                 var valueMin = BinaryPrimitives.ReadDoubleLittleEndian(elem.Slice(ReadingValueOffset + 8, 8));
@@ -274,17 +297,18 @@ public sealed class HwInfoService : IDisposable
 
                 var group = sensorIndex >= 0 && sensorIndex < sensorCount
                     ? sensorGroups[sensorIndex]
-                    : (Id: 0u, Instance: 0u, Name: string.Empty);
+                    : (Id: 0u, Instance: 0u, Name: string.Empty, OrigName: string.Empty);
 
                 list.Add(new HwInfoSensor(
                     type, group.Name, label, unit,
                     value, valueMin, valueMax, valueAvg,
-                    group.Id, group.Instance, readingId));
+                    group.Id, group.Instance, readingId,
+                    group.OrigName, labelOrig));
             }
 
             _lastPollTime = pollTime;
             sensors = list;
-            SetDiagnostics($"OK — {list.Count} readings, {sensorCount} sensors ({headerInfo}).");
+            SetDiagnostics("OK — {0} readings, {1} sensors ({2}).", list.Count, sensorCount, headerInfo);
             return true;
         }
         finally
@@ -301,4 +325,11 @@ public sealed class HwInfoService : IDisposable
             end = bytes.Length;
         return Encoding.Latin1.GetString(bytes.Slice(0, end));
     }
+}
+
+/// <summary>A status message of <see cref="HwInfoService"/>: an English format string and its
+/// arguments.</summary>
+public sealed record HwInfoDiagnostics(string Format, object[] Args)
+{
+    public string Text => string.Format(System.Globalization.CultureInfo.InvariantCulture, Format, Args);
 }

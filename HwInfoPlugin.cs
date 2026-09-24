@@ -1,10 +1,16 @@
+using System.Runtime.CompilerServices;
+using LoupixDeck.Plugin.HwInfo.Rendering.Tiles;
+using LoupixDeck.Plugin.HwInfo.Telemetry;
 using LoupixDeck.PluginSdk;
 
 namespace LoupixDeck.Plugin.HwInfo;
 
 /// <summary>
-/// Entry point of the HWiNFO plugin (Windows only). Reads HWiNFO's shared-memory
-/// sensor interface and exposes one display command plus a live sensor menu.
+/// Entry point of the HWiNFO plugin (Windows only). Reads HWiNFO's shared-memory sensor
+/// interface, samples it once a second into histories and alert states, and exposes two pixel-tile
+/// display commands through a live menu: <c>HwInfo.Sensor</c> (one reading per command; chain
+/// several for a multi-row tile) and <c>HwInfo.Pages</c> (component pages, a key press shows the
+/// next one) — the same tiles as the Argus Monitor plugin.
 /// </summary>
 public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettingsPage
 {
@@ -12,7 +18,14 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     /// wallpaper shows through. Read by the display command at render time.</summary>
     public const string TransparentBackgroundKey = "background.transparent";
 
+    /// <summary>Settings key: the CPU's maximum junction temperature in °C. CPU warn/critical
+    /// limits are TjMax − 15 / TjMax − 5.</summary>
+    public const string CpuTjMaxKey = "thresholds.cpuTjMax";
+
+    private const long DefaultTjMax = 100;
+
     private readonly HwInfoService _service = new();
+    private TelemetrySampler? _telemetry;
     private List<IPluginCommand> _commands = [];
     private IPluginHost? _host;
 
@@ -20,8 +33,8 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     {
         Id = "hwinfo",
         Name = "HWiNFO",
-        Version = new Version(1, 0, 0),
-        SdkVersion = new Version(1, 16, 0),
+        Version = new Version(1, 1, 0),
+        SdkVersion = new Version(1, 26, 0),
         Author = "RadiatorTwo",
         Description = "Display HWiNFO sensor readings on touch buttons; chain several to compose a multi-sensor tile."
     };
@@ -29,11 +42,23 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     public override void Initialize(IPluginHost host)
     {
         _host = host;
-        _commands = [new HwInfoSensorCommand(_service)];
+        _telemetry = new TelemetrySampler(_service, ReadTjMax);
+        _commands = [new HwInfoSensorCommand(_telemetry), new HwInfoPagesCommand(_telemetry)];
         _service.Start();
+        _telemetry.Start();
     }
 
-    public override void Shutdown() => _service.Stop();
+    public override void Shutdown()
+    {
+        _telemetry?.Stop();
+        _service.Stop();
+    }
+
+    private double ReadTjMax()
+    {
+        long tjMax = _host?.Settings.Get(CpuTjMaxKey, DefaultTjMax) ?? DefaultTjMax;
+        return Math.Clamp(tjMax, 60, 125);
+    }
 
     public override IEnumerable<IPluginCommand> GetCommands() => _commands;
 
@@ -59,42 +84,37 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         }
         else
         {
-            // HWiNFO's natural grouping is the parent sensor (CPU, GPU, a drive, …).
-            foreach (var sensorGroup in sensors
-                         .GroupBy(s => new { s.SensorId, s.SensorInstance, s.SensorName })
-                         .OrderBy(g => g.Key.SensorName))
-            {
-                var name = string.IsNullOrWhiteSpace(sensorGroup.Key.SensorName)
-                    ? $"Sensor 0x{sensorGroup.Key.SensorId:X}"
-                    : sensorGroup.Key.SensorName;
+            groupChildren.Add(new MenuNode { Name = "Pages", Children = PageNodes() });
 
-                var readings = new List<MenuNode>();
-                foreach (var sensor in sensorGroup.OrderBy(s => s.ReadingId))
-                {
-                    var label = string.IsNullOrWhiteSpace(sensor.Label)
-                        ? $"#{sensor.ReadingId}"
-                        : sensor.Label;
-
-                    readings.Add(new MenuNode
-                    {
-                        Name = label,
-                        CommandName = "HwInfo.Sensor",
-                        Parameters = new Dictionary<string, string>
-                        {
-                            { "Sensor", $"{sensor.SensorId}:{sensor.SensorInstance}:{sensor.ReadingId}" }
-                        }
-                    });
-                }
-
-                groupChildren.Add(new MenuNode { Name = name, Children = readings });
-            }
+            // One entry per reading (one command each), sorted by component, device and quantity.
+            // Combine several on a button via its command sequence to get a multi-row tile.
+            groupChildren.AddRange(SensorMenu.Build(sensors));
         }
 
         IReadOnlyList<MenuNode> result = [new MenuNode { Name = "HWiNFO", Children = groupChildren }];
         return Task.FromResult(result);
     }
 
-    // ───────── IPluginSettingsPage — transparency + status ─────────
+    /// <summary>The paging tile (every page, press for the next) and one fixed tile per page.</summary>
+    private static List<MenuNode> PageNodes() =>
+    [
+        PagesNode("All pages (press to cycle)", ComponentPages.DefaultSelection),
+        PagesNode("CPU page", ComponentPages.Cpu.Id),
+        PagesNode("GPU page", ComponentPages.Gpu.Id),
+        PagesNode("RAM page", ComponentPages.Ram.Id),
+        PagesNode("Network page", ComponentPages.Net.Id),
+        PagesNode("Disk page", ComponentPages.Disk.Id),
+        PagesNode("CPU summary", ComponentPages.Summary.Id)
+    ];
+
+    private static MenuNode PagesNode(string name, string pages) => new()
+    {
+        Name = name,
+        CommandName = HwInfoPagesCommand.CommandName,
+        Parameters = new Dictionary<string, string> { { "Pages", pages } }
+    };
+
+    // ───────── IPluginSettingsPage — transparency, TjMax + status ─────────
 
     public IReadOnlyList<PluginSettingDescriptor> SettingsSchema { get; } =
     [
@@ -105,7 +125,17 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
             Kind = PluginSettingKind.Toggle,
             DefaultValue = false,
             Description = "Draw buttons without an opaque background so the page wallpaper shows through. " +
-                          "Text is outlined for legibility."
+                          "Text gets a 1-pixel shadow for legibility."
+        },
+        new PluginSettingDescriptor
+        {
+            Key = CpuTjMaxKey,
+            Label = "CPU TjMax (°C)",
+            Kind = PluginSettingKind.Number,
+            DefaultValue = DefaultTjMax,
+            Description = "Maximum junction temperature of your CPU, from the vendor's spec sheet " +
+                          "(typically 95 for AMD Ryzen, 100–105 for Intel). CPU temperature turns amber " +
+                          "at TjMax − 15 and red at TjMax − 5."
         }
     ];
 
@@ -114,16 +144,40 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         new PluginSettingAction
         {
             Label = "Show Status",
-            Invoke = () => Task.FromResult(_service.Diagnostics)
+            Invoke = () =>
+            {
+                HwInfoDiagnostics status = _service.Status;
+                return Task.FromResult(string.Format(Tr(status.Format), status.Args));
+            }
         }
     ];
 
     private IReadOnlyList<PluginSettingAction>? _settingsActions;
 
+    /// <summary>Translates runtime text through the plugin's strings files; hosts before SDK 1.24
+    /// have no <see cref="IPluginHost.Tr"/> and get the English text.</summary>
+    private string Tr(string english)
+    {
+        try
+        {
+            return _host is null ? english : HostTr(_host, english);
+        }
+        catch (MissingMethodException)
+        {
+            return english;
+        }
+    }
+
+    // Kept out of line: the JIT resolves IPluginHost.Tr when it compiles this method, which throws
+    // on a host without it — inside Tr's try block rather than in its caller.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string HostTr(IPluginHost host, string english) => host.Tr(english);
+
     public void OnSettingsSaved()
     {
-        // Repaint bound touch buttons immediately so a transparency toggle is visible at once
-        // (otherwise it would only apply on the command's next poll).
-        _host?.RequestButtonRefresh("HwInfo.Sensor");
+        // Tiles redraw several times a second and pick up the new settings on their own; this
+        // only covers a host that drives them through the slower poll path.
+        _host?.RequestButtonRefresh(HwInfoSensorCommand.CommandName);
+        _host?.RequestButtonRefresh(HwInfoPagesCommand.CommandName);
     }
 }
