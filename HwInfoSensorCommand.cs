@@ -1,20 +1,27 @@
 using LoupixDeck.Plugin.HwInfo.Rendering;
+using LoupixDeck.Plugin.HwInfo.Rendering.Pixel;
+using LoupixDeck.Plugin.HwInfo.Rendering.Tiles;
+using LoupixDeck.Plugin.HwInfo.Telemetry;
 using LoupixDeck.PluginSdk;
 
 namespace LoupixDeck.Plugin.HwInfo;
 
 /// <summary>
-/// Display command that renders HWiNFO readings onto a touch button (90×90) via the SDK
-/// image-rendering API. One command carries one sensor; a button's command sequence composes the
-/// tile dynamically — the first (rendering) command reads <see cref="CommandContext.SequenceCommands"/>
-/// and draws one row per sibling command (up to four). The command name and the "Sensor" parameter
-/// (the stable HWiNFO triple) are unchanged, so buttons saved before the rework keep working.
+/// Display command that renders HWiNFO readings onto a touch button as pixel tiles
+/// (5×7 bitmap font, no anti-aliasing). One command carries one sensor; a button's command sequence
+/// composes the tile dynamically — the first (rendering) command reads
+/// <see cref="CommandContext.SequenceCommands"/> and draws one row per sibling command (up to four).
+/// The command name and the "Sensor" parameter (the stable HWiNFO triple) are unchanged, so buttons
+/// saved before the rework keep working.
 /// </summary>
-internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayImageCommand
+internal sealed class HwInfoSensorCommand(TelemetrySampler telemetry) : IAnimatedDisplayCommand, IDisplayImageCommand
 {
+    public const string CommandName = "HwInfo.Sensor";
+
     public CommandDescriptor Descriptor { get; } = new()
     {
-        CommandName = "HwInfo.Sensor",
+        // Stable public API — never rename after release.
+        CommandName = CommandName,
         DisplayName = "HWiNFO Sensor",
         Group = "HWiNFO",
         Icon = "\U000F0379",
@@ -27,37 +34,44 @@ internal sealed class HwInfoSensorCommand(HwInfoService hwInfo) : IDisplayImageC
 
     public ButtonTargets SupportedTargets => ButtonTargets.TouchButton;
 
-    public TimeSpan UpdateInterval => TimeSpan.FromSeconds(2);
+    public int TargetFps => PixelTile.TargetFps;
+
+    public TimeSpan UpdateInterval => TimeSpan.FromMilliseconds(500);
+
+    public AnimationFrameInfo RenderAnimatedFrame(CommandContext ctx, IRenderCanvas canvas, AnimationFrameContext frame) =>
+        PixelTile.Render(ctx, canvas, surface => Draw(ctx, surface, TileDrawing.BlinkOn(frame.Elapsed)));
 
     public bool RenderImage(CommandContext ctx, IRenderCanvas canvas)
     {
-        bool transparent = ctx.Host.Settings.Get(HwInfoPlugin.TransparentBackgroundKey, false);
-
-        List<SensorReading> readings = [];
-        foreach (string? sensorRef in SensorReferences(ctx))
-        {
-            readings.Add(HwInfoReadingBuilder.Build(sensorRef, hwInfo.Sensors, hwInfo.IsAvailable));
-            if (readings.Count >= SensorRenderer.MaxReadings)
-                break;
-        }
-
-        SensorRenderer.Render(canvas, readings, transparent ? SensorTheme.Transparent : SensorTheme.Default);
+        PixelTile.Render(ctx, canvas, surface => Draw(ctx, surface, PixelTile.WallClockBlink()));
         return true;
+    }
+
+    private void Draw(CommandContext ctx, PixelSurface surface, bool blinkOn)
+    {
+        TelemetryFrame frame = telemetry.Frame;
+
+        List<SensorRow> rows = SensorReferences(ctx)
+            .Take(SensorTileLayout.MaxRows)
+            .Select(sensorRef => HwInfoReadingBuilder.Build(sensorRef, frame.Sensors))
+            .ToList();
+
+        SensorTileLayout.Draw(surface, rows, frame, blinkOn);
     }
 
     /// <summary>
     /// The sensor references to render, in order. On a multi-command button the whole sequence is
-    /// available: take the "Sensor" parameter of every sibling that is also a HwInfo.Sensor command
-    /// (non-HWiNFO commands in the sequence are ignored). A single-command button reports an empty
+    /// available: take the "Sensor" parameter of every sibling that is also a HwInfo.Sensor
+    /// command (other commands in the sequence are ignored). A single-command button reports an empty
     /// sequence, so fall back to this command's own parameter.
     /// </summary>
-    private IEnumerable<string?> SensorReferences(CommandContext ctx)
+    private static IEnumerable<string?> SensorReferences(CommandContext ctx)
     {
         if (ctx.SequenceCommands.Count > 0)
         {
             foreach (SequenceCommand command in ctx.SequenceCommands)
             {
-                if (command.Name != Descriptor.CommandName)
+                if (command.Name != CommandName)
                     continue;
 
                 yield return command.Parameters is { Length: >= 1 } ? command.Parameters[0] : null;
