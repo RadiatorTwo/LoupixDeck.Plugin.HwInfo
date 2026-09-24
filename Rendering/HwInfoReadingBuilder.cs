@@ -23,6 +23,10 @@ internal static class HwInfoReadingBuilder
         if (sensor is null)
             return Placeholder(Fallback);
 
+        // The menu's name for the reading; a reading the menu does not offer keeps its own label.
+        if (TileLabels.For(sensors, key) is { } labels)
+            return new SensorRow(labels.Header, labels.Short, key);
+
         string header = Header(sensor);
         return new SensorRow(header, ShortHeaderFrom(header), key);
     }
