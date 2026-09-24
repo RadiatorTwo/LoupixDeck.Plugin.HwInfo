@@ -81,6 +81,11 @@ public sealed class HwInfoService : IDisposable
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(2);
     // Poll cadence when connected — only an 8-byte read happens while poll_time is unchanged.
     private static readonly TimeSpan PollDelay = TimeSpan.FromMilliseconds(250);
+    // Holding the mapping open keeps it alive after HWiNFO exits, frozen at its last poll. A
+    // poll_time that has not moved for this long means HWiNFO is gone (or its shared memory was
+    // switched off): the mapping is released and reopened, which fails once HWiNFO has really exited.
+    // Well above HWiNFO's polling period, which users can raise to a few seconds.
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(15);
 
     private MemoryMappedFile? _mmf;
     private MemoryMappedViewAccessor? _accessor;
@@ -88,6 +93,7 @@ public sealed class HwInfoService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
     private long _lastPollTime;
+    private long _lastChangeTicks;
 
     private volatile IReadOnlyList<HwInfoSensor> _sensors = Array.Empty<HwInfoSensor>();
     private volatile string _diagnostics = "Not started";
@@ -143,6 +149,7 @@ public sealed class HwInfoService : IDisposable
                     continue;
                 }
                 _lastPollTime = 0;
+                _lastChangeTicks = Environment.TickCount64;
             }
 
             try
@@ -150,7 +157,14 @@ public sealed class HwInfoService : IDisposable
                 if (TrySnapshot(out var snapshot))
                 {
                     _sensors = snapshot!;
+                    _lastChangeTicks = Environment.TickCount64;
                     SnapshotUpdated?.Invoke();
+                }
+                else if (Environment.TickCount64 - _lastChangeTicks > StaleAfter.TotalMilliseconds)
+                {
+                    SetDiagnostics("No new data from HWiNFO — reconnecting.");
+                    Close();
+                    continue;
                 }
             }
             catch (Exception ex)
