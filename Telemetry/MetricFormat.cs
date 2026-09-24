@@ -63,8 +63,19 @@ internal static class MetricFormatter
             return null;
 
         u = u[..^2];
-        bool bits = u.EndsWith("bit", StringComparison.Ordinal);
-        string prefix = u.TrimEnd('b', 'y', 't', 'e', 'i', 's');
+        // Only bytes and bits: "GT/s" (PCIe transfers) is no data rate.
+        string prefix = u.TrimEnd('s');
+        bool bits = false;
+        foreach (string quantity in (string[])["byte", "bit", "b"])
+        {
+            if (prefix.EndsWith(quantity, StringComparison.Ordinal))
+            {
+                prefix = prefix[..^quantity.Length];
+                bits = quantity == "bit";
+                break;
+            }
+        }
+
         double factor = prefix switch
         {
             "" => 1,
