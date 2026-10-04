@@ -86,5 +86,6 @@
   "RAM load warning (%)": "Carga de RAM advertencia (%)",
   "RAM load critical (%)": "Carga de RAM crítico (%)",
   "Fan stalled below (RPM)": "Ventilador detenido por debajo de (RPM)",
-  "A CPU or GPU fan slower than this turns red while the temperature it cools is at its warning or critical limit.": "Un ventilador de CPU o GPU más lento que esto se vuelve rojo mientras la temperatura que enfría está en su límite de advertencia o crítico."
+  "A CPU or GPU fan slower than this turns red while the temperature it cools is at its warning or critical limit.": "Un ventilador de CPU o GPU más lento que esto se vuelve rojo mientras la temperatura que enfría está en su límite de advertencia o crítico.",
+  "Not running — is HWiNFO open?": "No está en ejecución — ¿está abierto HWiNFO?"
 }

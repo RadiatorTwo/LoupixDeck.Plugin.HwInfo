@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 
@@ -217,8 +218,7 @@ public sealed class HwInfoService : IDisposable
         }
         catch (FileNotFoundException)
         {
-            // No mapping: HWiNFO is not running, or runs with its shared memory turned off.
-            SetDiagnostics(SharedMemoryMissing);
+            SetDiagnostics(MappingMissing());
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -237,6 +237,7 @@ public sealed class HwInfoService : IDisposable
 
     // Why the shared memory cannot be opened; English keys of the plugin's strings files.
     private const string WindowsOnly = "HWiNFO is only available on Windows.";
+    private const string NotRunning = "Not running — is HWiNFO open?";
     private const string SharedMemoryMissing = "Shared memory not found — enable 'Shared Memory Support' in HWiNFO.";
     private const string AccessDenied =
         "Access to HWiNFO's shared memory was denied — start LoupixDeck with the same rights as HWiNFO.";
@@ -257,11 +258,11 @@ public sealed class HwInfoService : IDisposable
             using MemoryMappedFile mapping = MemoryMappedFile.OpenExisting(MappingName, MemoryMappedFileRights.Read);
             using MemoryMappedViewAccessor header = mapping.CreateViewAccessor(0, HeaderSize, MemoryMappedFileAccess.Read);
             // HWiNFO marks the block invalid when its shared memory is switched off or it exits.
-            return header.ReadUInt32(0) == ValidSignature ? null : SharedMemoryMissing;
+            return header.ReadUInt32(0) == ValidSignature ? null : MappingMissing();
         }
         catch (FileNotFoundException)
         {
-            return SharedMemoryMissing;
+            return MappingMissing();
         }
         catch (UnauthorizedAccessException)
         {
@@ -271,6 +272,26 @@ public sealed class HwInfoService : IDisposable
         {
             return CannotOpen;
         }
+    }
+
+    // No usable shared memory: either HWiNFO is not running, or it runs with Shared Memory Support off.
+    private static string MappingMissing() => IsHwInfoRunning() ? SharedMemoryMissing : NotRunning;
+
+    // HWiNFO64.exe, or HWiNFO32.exe for the 32-bit build.
+    private static readonly string[] ProcessNames = ["HWiNFO64", "HWiNFO32"];
+
+    private static bool IsHwInfoRunning()
+    {
+        bool running = false;
+        foreach (string name in ProcessNames)
+        {
+            Process[] processes = Process.GetProcessesByName(name);
+            running |= processes.Length > 0;
+            foreach (Process process in processes)
+                process.Dispose();
+        }
+
+        return running;
     }
 
     private void Close()
