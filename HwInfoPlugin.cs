@@ -54,7 +54,7 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     public override void Initialize(IPluginHost host)
     {
         _host = host;
-        _telemetry = new TelemetrySampler(_service, ReadTjMax);
+        _telemetry = new TelemetrySampler(_service, ReadSettings);
         _commands = [new HwInfoSensorCommand(_telemetry), new HwInfoPagesCommand(_telemetry)];
         _service.Start();
         _telemetry.Start();
@@ -90,10 +90,10 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         ];
     }
 
-    private double ReadTjMax()
+    private TelemetrySettings ReadSettings()
     {
         long tjMax = _host?.Settings.Get(CpuTjMaxKey, DefaultTjMax) ?? DefaultTjMax;
-        return Math.Clamp(tjMax, 60, 125);
+        return TelemetrySettings.Default with { TjMax = Math.Clamp(tjMax, 60, 125) };
     }
 
     public override IEnumerable<IPluginCommand> GetCommands() => _commands;
