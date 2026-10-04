@@ -110,15 +110,12 @@ public sealed class HwInfoService : IDisposable
     /// <summary>The most recent problem, kept after the status has moved on; null if none yet.</summary>
     public HwInfoDiagnostics? LastError => _lastError;
 
-    public event Action? SnapshotUpdated;
-
     private void SetDiagnostics(string format, params object[] args)
     {
         HwInfoDiagnostics diagnostics = new(format, args);
         if (_diagnostics.Text == diagnostics.Text)
             return;
         _diagnostics = diagnostics;
-        SnapshotUpdated?.Invoke();
     }
 
     /// <summary>Receives a line per error event; the plugin decides whether it reaches a log.</summary>
@@ -184,7 +181,6 @@ public sealed class HwInfoService : IDisposable
                 {
                     _sensors = snapshot!;
                     _lastChangeTicks = Environment.TickCount64;
-                    SnapshotUpdated?.Invoke();
                 }
                 else if (Environment.TickCount64 - _lastChangeTicks > StaleAfter.TotalMilliseconds)
                 {
