@@ -16,12 +16,11 @@ internal static class HwInfoReadingBuilder
 
     public static SensorRow Build(string? parameter, IReadOnlyList<HwInfoSensor> sensors)
     {
-        if (!HwInfoSensorRef.TryParse(parameter, out string key))
+        if (!HwInfoSensorRef.TryParse(parameter, out (uint, uint, uint) id)
+            || !ByReference(sensors).TryGetValue(id, out HwInfoSensor? sensor))
             return Placeholder(Fallback);
 
-        HwInfoSensor? sensor = sensors.FirstOrDefault(s => MetricKeys.ForSensor(s) == key);
-        if (sensor is null)
-            return Placeholder(Fallback);
+        string key = MetricKeys.ForSensor(sensor);
 
         // The menu's name for the reading; a reading the menu does not offer keeps its own label.
         if (TileLabels.For(sensors, key) is { } labels)
@@ -32,6 +31,31 @@ internal static class HwInfoReadingBuilder
     }
 
     private static SensorRow Placeholder(string header) => new(header, header, null);
+
+    /// <summary>The readings by their HWiNFO triple. Indexed once per sensor snapshot, so a lookup
+    /// does not walk every reading.</summary>
+    private static Dictionary<(uint, uint, uint), HwInfoSensor> ByReference(IReadOnlyList<HwInfoSensor> sensors)
+    {
+        SensorIndex? index = _index;
+        if (index is null || !ReferenceEquals(index.Sensors, sensors))
+        {
+            Dictionary<(uint, uint, uint), HwInfoSensor> byReference = new(sensors.Count);
+            foreach (HwInfoSensor sensor in sensors)
+                byReference.TryAdd((sensor.SensorId, sensor.SensorInstance, sensor.ReadingId), sensor);
+
+            _index = index = new SensorIndex(sensors, byReference);
+        }
+
+        return index.ByReference;
+    }
+
+    private sealed record SensorIndex(
+        IReadOnlyList<HwInfoSensor> Sensors,
+        Dictionary<(uint, uint, uint), HwInfoSensor> ByReference);
+
+    // Replaced as a whole when the snapshot changes; render threads may race to build it, which
+    // only costs a duplicate build.
+    private static volatile SensorIndex? _index;
 
     /// <summary>The tile / row title for a reading: its HWiNFO label, falling back to the parent
     /// sensor name and finally a reading-id marker.</summary>
