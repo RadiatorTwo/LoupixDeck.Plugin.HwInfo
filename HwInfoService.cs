@@ -239,6 +239,37 @@ public sealed class HwInfoService : IDisposable
         "Access to HWiNFO's shared memory was denied — start LoupixDeck with the same rights as HWiNFO.";
     private const string CannotOpen = "Cannot open HWiNFO's shared memory — retrying.";
 
+    /// <summary>
+    /// Checks right now, without connecting, whether HWiNFO's shared memory can be opened: null when
+    /// it can, otherwise the reason (an English key of the strings files). Lets a caller answer
+    /// before the poll loop has made its first connection attempt.
+    /// </summary>
+    public static string? ProbeSharedMemory()
+    {
+        if (!OperatingSystem.IsWindows())
+            return WindowsOnly;
+
+        try
+        {
+            using MemoryMappedFile mapping = MemoryMappedFile.OpenExisting(MappingName, MemoryMappedFileRights.Read);
+            using MemoryMappedViewAccessor header = mapping.CreateViewAccessor(0, HeaderSize, MemoryMappedFileAccess.Read);
+            // HWiNFO marks the block invalid when its shared memory is switched off or it exits.
+            return header.ReadUInt32(0) == ValidSignature ? null : SharedMemoryMissing;
+        }
+        catch (FileNotFoundException)
+        {
+            return SharedMemoryMissing;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return AccessDenied;
+        }
+        catch (Exception)
+        {
+            return CannotOpen;
+        }
+    }
+
     private void Close()
     {
         try { _accessor?.Dispose(); } catch { }

@@ -4,7 +4,9 @@ HWiNFO integration plugin for [LoupixDeck](https://github.com/RadiatorTwo/Loupix
 built against [LoupixDeck.PluginSdk](https://github.com/RadiatorTwo/LoupixDeck.PluginSdk).
 
 Windows only. Requires "Shared Memory Support" to be enabled in HWiNFO. When HWiNFO is not
-running, the tiles show "NOT RUNNING" and recover automatically once it is back.
+running, the tiles show "NOT RUNNING" and recover automatically once it is back. The plugin
+reports this as an unmet requirement: the LoupixDeck Plugins page marks it "Needs attention"
+and "Show Status" in the plugin settings says why.
 
 ## Features
 
@@ -22,7 +24,7 @@ The **Transparent background** setting lets the page wallpaper show through.
   that carried the most data, DISK sums the transfer rates of all drives.
 
 The menu, the settings and the command texts are available in English, German and Spanish.
-Requires LoupixDeck with Plugin SDK 1.26 or later.
+Requires LoupixDeck with Plugin SDK 1.28 or later.
 
 ## Build & deploy
 

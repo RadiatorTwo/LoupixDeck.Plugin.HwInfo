@@ -12,7 +12,7 @@ namespace LoupixDeck.Plugin.HwInfo;
 /// several for a multi-row tile) and <c>HwInfo.Pages</c> (component pages, a key press shows the
 /// next one) — the same tiles as the Argus Monitor plugin.
 /// </summary>
-public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettingsPage
+public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettingsPage, IPluginRequirements
 {
     /// <summary>Settings key: when true, buttons are drawn without an opaque background so the page
     /// wallpaper shows through. Read by the display command at render time.</summary>
@@ -64,6 +64,30 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
     {
         _telemetry?.Stop();
         _service.Stop();
+    }
+
+    // ───────── IPluginRequirements ─────────
+
+    /// <summary>
+    /// One requirement: HWiNFO running with Shared Memory Support on. The host asks right after
+    /// loading, possibly before the poll loop has connected, so an unconnected service probes the
+    /// shared memory directly instead of reporting a false "not met". Texts are English keys the
+    /// host translates through the plugin's strings files.
+    /// </summary>
+    public IReadOnlyList<PluginRequirement> GetRequirements()
+    {
+        string? problem = _service.IsAvailable ? null : HwInfoService.ProbeSharedMemory();
+        return
+        [
+            new PluginRequirement
+            {
+                Id = "hwinfo-shared-memory",
+                Name = "HWiNFO shared memory",
+                IsMet = problem is null,
+                Message = problem,
+                InstallHint = "Run HWiNFO and turn on 'Shared Memory Support' in its settings."
+            }
+        ];
     }
 
     private double ReadTjMax()

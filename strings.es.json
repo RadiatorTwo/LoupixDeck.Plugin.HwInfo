@@ -66,5 +66,8 @@
   "No new data from HWiNFO for {0} s.": "Sin datos nuevos de HWiNFO desde hace {0} s.",
   "Access denied ({0}).": "Acceso denegado ({0}).",
   "Opening failed ({0}: {1}).": "Error al abrir ({0}: {1}).",
-  "Last error: {0}": "Último error: {0}"
+  "Last error: {0}": "Último error: {0}",
+
+  "HWiNFO shared memory": "Memoria compartida de HWiNFO",
+  "Run HWiNFO and turn on 'Shared Memory Support' in its settings.": "Inicia HWiNFO y activa «Shared Memory Support» en su configuración."
 }
