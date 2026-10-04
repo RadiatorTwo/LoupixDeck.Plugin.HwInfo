@@ -120,6 +120,9 @@ public sealed class HwInfoService : IDisposable
         SnapshotUpdated?.Invoke();
     }
 
+    /// <summary>Receives a line per error event; the plugin decides whether it reaches a log.</summary>
+    public Action<string>? Log { get; set; }
+
     /// <summary>Records a problem as <see cref="LastError"/>. A check that fails on every poll
     /// reports it once, not four times a second.</summary>
     private void SetError(string format, params object[] args)
@@ -128,7 +131,7 @@ public sealed class HwInfoService : IDisposable
         if (_lastError?.Text == error.Text)
             return;
         _lastError = error;
-        Console.WriteLine($"HwInfoService: {error.Text}");
+        Log?.Invoke($"HwInfoService: {error.Text}");
     }
 
     public void Start()

@@ -7,7 +7,8 @@ namespace LoupixDeck.Plugin.HwInfo.Telemetry;
 /// alert states are evaluated with hysteresis. Runs on its own timer, off the host's render lock;
 /// render calls only read the latest published frame.
 /// </summary>
-internal sealed class TelemetrySampler(HwInfoService service, Func<TelemetrySettings> readSettings) : IDisposable
+internal sealed class TelemetrySampler(HwInfoService service, Func<TelemetrySettings> readSettings,
+    Action<string> log) : IDisposable
 {
     /// <summary>Samples kept per metric — the width of the design's 72-px chart.</summary>
     public const int HistoryLength = 72;
@@ -44,7 +45,7 @@ internal sealed class TelemetrySampler(HwInfoService service, Func<TelemetrySett
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"TelemetrySampler: sample failed ({ex.Message}).");
+            log($"TelemetrySampler: sample failed ({ex.Message}).");
         }
     }
 
