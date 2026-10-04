@@ -7,7 +7,10 @@ internal enum MetricFormat
 {
     /// <summary>Number with at most one decimal plus the sensor's own unit.</summary>
     Generic,
+    /// <summary>Native °C, shown in °C.</summary>
     Temperature,
+    /// <summary>Native °C, shown in °F. Values, history and limits stay in °C.</summary>
+    TemperatureFahrenheit,
     Percent,
     /// <summary>Native MHz, shown as GHz with two decimals ("4.62 GHZ").</summary>
     ClockMhz,
@@ -34,6 +37,7 @@ internal static class MetricFormatter
         return format switch
         {
             MetricFormat.Temperature => (Fixed(value, 0), "°C"),
+            MetricFormat.TemperatureFahrenheit => (Fixed((value * 9 / 5) + 32, 0), "°F"),
             MetricFormat.Percent => (Fixed(value, 0), "%"),
             MetricFormat.ClockMhz => (Fixed(value / 1000.0, 2), "GHZ"),
             MetricFormat.Rpm => (Fixed(value, 0), "RPM"),

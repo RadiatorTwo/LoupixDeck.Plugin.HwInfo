@@ -112,7 +112,7 @@ internal static class TileDrawing
         if (height < 2)
             return;
 
-        double[] history = metric.History;
+        ReadOnlySpan<double> history = metric.History.Span;
         int count = Math.Min(history.Length, W);
         int first = history.Length - count;
 

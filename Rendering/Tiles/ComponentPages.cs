@@ -44,10 +44,28 @@ internal static class ComponentPages
         [new(PageMetrics.CpuTemp, "TEMP"), new(PageMetrics.CpuClock, "CLK"), new(PageMetrics.CpuFan, "FAN"),
             new(PageMetrics.CpuLoad, "LOAD")], IsSummary: true);
 
-    public static IReadOnlyList<ComponentPage> All { get; } = [Cpu, Gpu, Ram, Net, Disk, Summary];
+    /// <summary>CPU package power, GPU board power and both together.</summary>
+    public static ComponentPage Power { get; } = new("pwr", "PWR", PageMetrics.CpuPower, "CPU",
+        [new(PageMetrics.GpuPower, "GPU"), new(PageMetrics.PowerTotal, "SUM")], Spark: PageMetrics.CpuPower);
 
-    /// <summary>The cycle used when a tile names no pages: every component page, then the summary.
-    /// Separated by '|' because the host splits a command's parameters at commas.</summary>
+    public static ComponentPage Vram { get; } = new("vram", "VRAM", PageMetrics.VramLoad, "LOAD",
+        [new(PageMetrics.VramUsed, "USED"), new(PageMetrics.VramFree, "FREE")], Spark: PageMetrics.VramLoad);
+
+    /// <summary>The charge level, on systems with a battery.</summary>
+    public static ComponentPage Battery { get; } = new("bat", "BAT", PageMetrics.BatteryLevel, "CHRG", [],
+        Spark: PageMetrics.BatteryLevel);
+
+    /// <summary>Every page, in the order <see cref="AllSelection"/> cycles them: the component pages,
+    /// then the summary.</summary>
+    public static IReadOnlyList<ComponentPage> All { get; } = [Cpu, Gpu, Ram, Net, Disk, Power, Vram, Battery, Summary];
+
+    /// <summary>Selects every page in <see cref="All"/>, including pages added in later versions.
+    /// The menu's "All pages" entry stores it.</summary>
+    public const string AllSelection = "all";
+
+    /// <summary>The cycle used when a tile names no pages. Separated by '|' because the host splits a
+    /// command's parameters at commas. It is the list the "All pages" entry stored before
+    /// <see cref="AllSelection"/> existed; kept as it was, so such tiles keep cycling exactly as before.</summary>
     public const string DefaultSelection = "cpu|gpu|ram|net|disk|sum";
 
     private static readonly char[] Separators = ['|', ',', ' ', ';'];
@@ -55,7 +73,7 @@ internal static class ComponentPages
     /// <summary>
     /// Parses page lists ("cpu|gpu|sum") in order. Every entry may itself hold several ids, so a
     /// list the host split at commas ("cpu", "gpu") reads the same as one joined by '|'. Unknown
-    /// ids are skipped; nothing known at all falls back to <see cref="DefaultSelection"/>.
+    /// ids are skipped; "all" adds every page; nothing known at all falls back to <see cref="DefaultSelection"/>.
     /// </summary>
     public static IReadOnlyList<ComponentPage> Parse(IEnumerable<string?> selections)
     {
@@ -65,6 +83,12 @@ internal static class ComponentPages
             foreach (string id in (selection ?? string.Empty).Split(Separators,
                          StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
+                if (id.Equals(AllSelection, StringComparison.OrdinalIgnoreCase))
+                {
+                    pages.AddRange(All);
+                    continue;
+                }
+
                 ComponentPage? page = All.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
                 if (page is not null)
                     pages.Add(page);

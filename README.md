@@ -4,7 +4,9 @@ HWiNFO integration plugin for [LoupixDeck](https://github.com/RadiatorTwo/Loupix
 built against [LoupixDeck.PluginSdk](https://github.com/RadiatorTwo/LoupixDeck.PluginSdk).
 
 Windows only. Requires "Shared Memory Support" to be enabled in HWiNFO. When HWiNFO is not
-running, the tiles show "NOT RUNNING" and recover automatically once it is back.
+running, the tiles show "NOT RUNNING" and recover automatically once it is back. The plugin
+reports this as an unmet requirement: the LoupixDeck Plugins page marks it "Needs attention"
+and "Show Status" in the plugin settings says why.
 
 ## Features
 
@@ -17,12 +19,27 @@ The **Transparent background** setting lets the page wallpaper show through.
   tile. Readings are offered as a live menu sorted by component (CPU, GPU, Memory, Storage,
   Mainboard, Network, Other), device and quantity, named after HWiNFO's English labels whatever
   language HWiNFO runs in. Buttons saved with earlier versions keep their reading.
-- `HwInfo.Pages` — component pages CPU, GPU, RAM, NET, DISK and a CPU summary; a key press shows
-  the next page. Chain several `Pages` commands to build your own cycle. NET follows the adapter
-  that carried the most data, DISK sums the transfer rates of all drives.
+- `HwInfo.Pages` — component pages CPU, GPU, RAM, NET, DISK, PWR, VRAM, BAT and a CPU summary;
+  a key press shows the next page. The menu's "All pages" entry cycles through every page,
+  including pages added later. Chain several `Pages` commands to build your own cycle. Pages
+  without data are skipped. NET follows the adapter that carried the most data, DISK sums the
+  transfer rates of all drives. PWR shows CPU package power, GPU board power and their sum; VRAM
+  the primary GPU's memory in use; BAT the battery charge level (laptops).
+
+Settings: transparent background, the CPU's TjMax (CPU temperature turns amber at
+TjMax − 15 °C and red at TjMax − 5 °C), temperatures in °F instead of °C (display only), and
+the alert limits: GPU 80/88 °C, drives 55/65 °C, RAM load 85/95 % (warning/critical) and a
+stalled fan below 200 RPM by default.
 
 The menu, the settings and the command texts are available in English, German and Spanish.
-Requires LoupixDeck with Plugin SDK 1.26 or later.
+Requires LoupixDeck with Plugin SDK 1.28 or later.
+
+## Troubleshooting
+
+"Show Status" in the plugin settings names the current state and the last error. For a log,
+start LoupixDeck with the environment variable `LOUPIXDECK_DEBUG_HWINFO=1`: error events then
+go to the host log (in release builds `%USERPROFILE%\.config\LoupixDeck\loupixdeck-startup.log`).
+Without it the plugin writes nothing there.
 
 ## Build & deploy
 

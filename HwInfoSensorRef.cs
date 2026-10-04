@@ -17,6 +17,17 @@ internal static class HwInfoSensorRef
     public static bool TryParse(string? raw, out string key)
     {
         key = string.Empty;
+        if (!TryParse(raw, out (uint SensorId, uint SensorInstance, uint ReadingId) id))
+            return false;
+
+        key = Format(id.SensorId, id.SensorInstance, id.ReadingId);
+        return true;
+    }
+
+    /// <summary>Parses a saved reference into its triple.</summary>
+    public static bool TryParse(string? raw, out (uint SensorId, uint SensorInstance, uint ReadingId) id)
+    {
+        id = default;
         if (string.IsNullOrWhiteSpace(raw))
             return false;
 
@@ -27,7 +38,7 @@ internal static class HwInfoSensorRef
             || !TryParseUInt(parts[2], out uint readingId))
             return false;
 
-        key = Format(sensorId, sensorInstance, readingId);
+        id = (sensorId, sensorInstance, readingId);
         return true;
     }
 

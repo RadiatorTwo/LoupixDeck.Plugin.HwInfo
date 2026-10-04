@@ -30,9 +30,10 @@ internal static class SensorTileLayout
             return;
         }
 
-        List<(string, MetricSnapshot?)> grid = rows.Take(MaxRows)
-            .Select(r => (r.ShortHeader, Resolve(r, frame)))
-            .ToList();
+        int count = Math.Min(rows.Count, MaxRows);
+        List<(string, MetricSnapshot?)> grid = new(count);
+        for (int i = 0; i < count; i++)
+            grid.Add((rows[i].ShortHeader, Resolve(rows[i], frame)));
         // Two rows leave room for a gauge bar under each; three and four fill the grid as they are.
         bool bars = grid.Count == 2;
         int blockHeight = PageLayout.GridHeight(grid.Count, bars);
@@ -48,7 +49,8 @@ internal static class SensorTileLayout
 
         if (metric is null)
         {
-            surface.Text("?", TileDrawing.L, 21, p.Dim, 3);
+            // "?" for a sensor that does not exist; "--" for one sampled from the next second on.
+            surface.Text(row.MetricKey is null ? "?" : "--", TileDrawing.L, 21, p.Dim, 3);
             return;
         }
 

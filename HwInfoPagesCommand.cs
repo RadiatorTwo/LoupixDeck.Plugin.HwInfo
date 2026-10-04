@@ -31,7 +31,9 @@ internal sealed class HwInfoPagesCommand(TelemetrySampler telemetry) : IAnimated
         ParameterTemplate = "({Pages})",
         Parameters = [new CommandParameter("Pages", typeof(string))],
         // Surfaced per page selection through the dynamic menu.
-        HiddenFromMenu = true
+        HiddenFromMenu = true,
+        // The tile fills the whole key; no host icon or caption on top of it.
+        ButtonLayout = new ButtonLayoutDescriptor { Mode = ButtonLayoutMode.None }
     };
 
     public ButtonTargets SupportedTargets => ButtonTargets.TouchButton;

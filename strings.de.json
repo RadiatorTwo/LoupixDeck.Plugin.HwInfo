@@ -56,5 +56,36 @@
   "Unexpected element size — {0}": "Unerwartete Elementgröße — {0}",
   "Element count out of range — {0}": "Elementanzahl außerhalb des gültigen Bereichs — {0}",
   "Section exceeds mapping — {0}": "Abschnitt reicht über den Speicherbereich hinaus — {0}",
-  "OK — {0} readings, {1} sensors ({2}).": "OK — {0} Messwerte, {1} Sensoren ({2})."
+  "OK — {0} readings, {1} sensors ({2}).": "OK — {0} Messwerte, {1} Sensoren ({2}).",
+
+  "HWiNFO is only available on Windows.": "HWiNFO gibt es nur unter Windows.",
+  "Connected — waiting for data.": "Verbunden — warte auf Daten.",
+  "Access to HWiNFO's shared memory was denied — start LoupixDeck with the same rights as HWiNFO.": "Zugriff auf das Shared Memory von HWiNFO verweigert — LoupixDeck mit denselben Rechten wie HWiNFO starten.",
+  "Cannot open HWiNFO's shared memory — retrying.": "Shared Memory von HWiNFO kann nicht geöffnet werden — neuer Versuch.",
+  "Reading failed — reconnecting.": "Lesen fehlgeschlagen — verbinde neu.",
+  "No new data from HWiNFO for {0} s.": "Seit {0} s keine neuen Daten von HWiNFO.",
+  "Access denied ({0}).": "Zugriff verweigert ({0}).",
+  "Opening failed ({0}: {1}).": "Öffnen fehlgeschlagen ({0}: {1}).",
+  "Last error: {0}": "Letzter Fehler: {0}",
+
+  "HWiNFO shared memory": "HWiNFO Shared Memory",
+  "Run HWiNFO and turn on 'Shared Memory Support' in its settings.": "HWiNFO starten und in den Einstellungen „Shared Memory Support“ einschalten.",
+
+  "Power page": "Leistungs-Seite",
+  "VRAM page": "VRAM-Seite",
+  "Battery page": "Akku-Seite",
+
+  "Show temperatures in °F": "Temperaturen in °F anzeigen",
+  "Show temperatures in degrees Fahrenheit. The alert limits below stay in °C.": "Temperaturen in Grad Fahrenheit anzeigen. Die Alarmgrenzen unten bleiben in °C.",
+  "Alert limits": "Alarmgrenzen",
+  "A reading turns amber at its warning limit and red at its critical limit.": "Ein Wert wird an seiner Warngrenze gelb und an seiner kritischen Grenze rot.",
+  "GPU warning (°C)": "GPU Warnung (°C)",
+  "GPU critical (°C)": "GPU kritisch (°C)",
+  "Drive warning (°C)": "Laufwerk Warnung (°C)",
+  "Drive critical (°C)": "Laufwerk kritisch (°C)",
+  "RAM load warning (%)": "RAM-Auslastung Warnung (%)",
+  "RAM load critical (%)": "RAM-Auslastung kritisch (%)",
+  "Fan stalled below (RPM)": "Lüfter steht unter (U/min)",
+  "A CPU or GPU fan slower than this turns red while the temperature it cools is at its warning or critical limit.": "Ein CPU- oder GPU-Lüfter, der langsamer dreht, wird rot, solange die Temperatur, die er kühlt, an ihrer Warn- oder kritischen Grenze ist.",
+  "Not running — is HWiNFO open?": "Läuft nicht — ist HWiNFO geöffnet?"
 }

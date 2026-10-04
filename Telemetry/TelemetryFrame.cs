@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace LoupixDeck.Plugin.HwInfo.Telemetry;
 
 /// <summary>
@@ -8,7 +10,7 @@ namespace LoupixDeck.Plugin.HwInfo.Telemetry;
 internal sealed record MetricSnapshot(
     double Value,
     MetricState State,
-    double[] History,
+    ReadOnlyMemory<double> History,
     double Min,
     double Max,
     double? WarnAt,
@@ -31,7 +33,8 @@ internal sealed record MetricSnapshot(
 internal sealed class TelemetryFrame(
     bool isAvailable,
     IReadOnlyList<HwInfoSensor> sensors,
-    IReadOnlyDictionary<string, MetricSnapshot> metrics)
+    IReadOnlyDictionary<string, MetricSnapshot> metrics,
+    ConcurrentDictionary<string, byte>? requested = null)
 {
     public static TelemetryFrame Unavailable { get; } = new(false, [], new Dictionary<string, MetricSnapshot>());
 
@@ -39,5 +42,14 @@ internal sealed class TelemetryFrame(
 
     public IReadOnlyList<HwInfoSensor> Sensors { get; } = sensors;
 
-    public MetricSnapshot? Get(string key) => metrics.GetValueOrDefault(key);
+    /// <summary>The metric under <paramref name="key"/>. A sensor metric is sampled only once a tile
+    /// asks for it: a miss registers the key, and the next sample (within a second) tracks it.</summary>
+    public MetricSnapshot? Get(string key)
+    {
+        if (metrics.TryGetValue(key, out MetricSnapshot? metric))
+            return metric;
+
+        requested?.TryAdd(key, 0);
+        return null;
+    }
 }

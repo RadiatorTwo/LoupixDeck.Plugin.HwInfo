@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using LoupixDeck.Plugin.HwInfo.Rendering.Pixel;
 using LoupixDeck.Plugin.HwInfo.Rendering.Tiles;
@@ -199,7 +200,9 @@ internal static partial class TileLabels
     {
         foreach ((string word, string direction) in DirectionWords)
         {
-            if (Regex.IsMatch(label, $"(?<![A-Za-z]){word}(?![A-Za-z])", RegexOptions.IgnoreCase))
+            Regex pattern = DirectionPatterns.GetOrAdd(word,
+                static w => new Regex($"(?<![A-Za-z]){w}(?![A-Za-z])", RegexOptions.IgnoreCase));
+            if (pattern.IsMatch(label))
                 return direction;
         }
 
@@ -293,8 +296,15 @@ internal static partial class TileLabels
     }
 
     private static string ReplaceWord(string text, string word, string replacement) =>
-        Regex.Replace(text, $@"(?<!\w){Regex.Escape(word)}(?!\w)", replacement,
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        WordPatterns.GetOrAdd(word,
+                static w => new Regex($@"(?<!\w){Regex.Escape(w)}(?!\w)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            .Replace(text, replacement);
+
+    // The patterns built from the word lists, each parsed once. The static Regex methods keep only
+    // the 15 most recently used patterns, fewer than the abbreviation list holds, so every label
+    // computation parsed every pattern again.
+    private static readonly ConcurrentDictionary<string, Regex> WordPatterns = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Regex> DirectionPatterns = new(StringComparer.Ordinal);
 
     /// <summary>"Clk max" → "max": in a row label the unit already says clock or multiplier.</summary>
     [GeneratedRegex(@"^(?:Clk|Mult)\s+(max|min|avg)$")]
