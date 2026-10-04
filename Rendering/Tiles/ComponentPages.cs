@@ -44,10 +44,22 @@ internal static class ComponentPages
         [new(PageMetrics.CpuTemp, "TEMP"), new(PageMetrics.CpuClock, "CLK"), new(PageMetrics.CpuFan, "FAN"),
             new(PageMetrics.CpuLoad, "LOAD")], IsSummary: true);
 
-    public static IReadOnlyList<ComponentPage> All { get; } = [Cpu, Gpu, Ram, Net, Disk, Summary];
+    /// <summary>CPU package power, GPU board power and both together.</summary>
+    public static ComponentPage Power { get; } = new("pwr", "PWR", PageMetrics.CpuPower, "CPU",
+        [new(PageMetrics.GpuPower, "GPU"), new(PageMetrics.PowerTotal, "SUM")], Spark: PageMetrics.CpuPower);
+
+    public static ComponentPage Vram { get; } = new("vram", "VRAM", PageMetrics.VramLoad, "LOAD",
+        [new(PageMetrics.VramUsed, "USED"), new(PageMetrics.VramFree, "FREE")], Spark: PageMetrics.VramLoad);
+
+    /// <summary>The charge level, on systems with a battery.</summary>
+    public static ComponentPage Battery { get; } = new("bat", "BAT", PageMetrics.BatteryLevel, "CHRG", [],
+        Spark: PageMetrics.BatteryLevel);
+
+    public static IReadOnlyList<ComponentPage> All { get; } = [Cpu, Gpu, Ram, Net, Disk, Summary, Power, Vram, Battery];
 
     /// <summary>The cycle used when a tile names no pages: every component page, then the summary.
-    /// Separated by '|' because the host splits a command's parameters at commas.</summary>
+    /// Separated by '|' because the host splits a command's parameters at commas. Pages added later
+    /// (power, VRAM, battery) stay out of it, so saved tiles keep cycling exactly as before.</summary>
     public const string DefaultSelection = "cpu|gpu|ram|net|disk|sum";
 
     private static readonly char[] Separators = ['|', ',', ' ', ';'];

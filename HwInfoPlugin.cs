@@ -140,7 +140,10 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
         PagesNode("RAM page", ComponentPages.Ram.Id),
         PagesNode("Network page", ComponentPages.Net.Id),
         PagesNode("Disk page", ComponentPages.Disk.Id),
-        PagesNode("CPU summary", ComponentPages.Summary.Id)
+        PagesNode("CPU summary", ComponentPages.Summary.Id),
+        PagesNode("Power page", ComponentPages.Power.Id),
+        PagesNode("VRAM page", ComponentPages.Vram.Id),
+        PagesNode("Battery page", ComponentPages.Battery.Id)
     ];
 
     private static MenuNode PagesNode(string name, string pages) => new()

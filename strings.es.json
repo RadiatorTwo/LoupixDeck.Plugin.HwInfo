@@ -69,5 +69,9 @@
   "Last error: {0}": "Último error: {0}",
 
   "HWiNFO shared memory": "Memoria compartida de HWiNFO",
-  "Run HWiNFO and turn on 'Shared Memory Support' in its settings.": "Inicia HWiNFO y activa «Shared Memory Support» en su configuración."
+  "Run HWiNFO and turn on 'Shared Memory Support' in its settings.": "Inicia HWiNFO y activa «Shared Memory Support» en su configuración.",
+
+  "Power page": "Página de potencia",
+  "VRAM page": "Página de VRAM",
+  "Battery page": "Página de batería"
 }

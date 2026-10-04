@@ -27,6 +27,12 @@ internal static partial class PageMetrics
     public const string DiskTemp = "disk.temp";
     public const string DiskRead = "disk.read";
     public const string DiskWrite = "disk.write";
+    public const string GpuPower = "gpu.power";
+    public const string PowerTotal = "pwr.total";
+    public const string VramLoad = "vram.load";
+    public const string VramUsed = "vram.used";
+    public const string VramFree = "vram.free";
+    public const string BatteryLevel = "bat.level";
 
     /// <summary>One derived metric: how to read it from a snapshot and how to describe it.</summary>
     public sealed record Definition(
@@ -58,8 +64,7 @@ internal static partial class PageMetrics
             s => Named(Of(s, Components.Cpu, HwInfoReadingType.Usage), "Total CPU Usage"),
             _ => new MetricInfo(MetricFormat.Percent, 0, 100, Smooth: true)),
         new(CpuPower,
-            s => Named(Of(s, Components.Cpu, HwInfoReadingType.Power), "CPU Package Power")
-                 ?? Named(Of(s, Components.Cpu, HwInfoReadingType.Power), "CPU PPT"),
+            s => CpuPackagePower(s),
             _ => new MetricInfo(MetricFormat.Watt, 0, 100, GrowToPeak: true)),
 
         new(GpuTemp,
@@ -105,7 +110,35 @@ internal static partial class PageMetrics
             _ => new MetricInfo(MetricFormat.BytesPerSecond, 0, 0)),
         new(DiskWrite,
             s => DriveRates(s, Write, Read, 1),
-            _ => new MetricInfo(MetricFormat.BytesPerSecond, 0, 0))
+            _ => new MetricInfo(MetricFormat.BytesPerSecond, 0, 0)),
+
+        new(GpuPower,
+            s => GpuBoardPower(s),
+            _ => new MetricInfo(MetricFormat.Watt, 0, 300, GrowToPeak: true)),
+        // CPU package plus GPU board power; whichever HWiNFO reports when one is missing.
+        new(PowerTotal,
+            s => CpuPackagePower(s) is { } cpu ? cpu + (GpuBoardPower(s) ?? 0) : GpuBoardPower(s),
+            _ => new MetricInfo(MetricFormat.Watt, 0, 400, GrowToPeak: true)),
+
+        // The primary GPU's memory. HWiNFO reports what is in use in MB (and on most cards in %),
+        // and on most cards what is available; a missing one follows from the others.
+        new(VramLoad,
+            s => Named(OfGpuUnit(s, "%"), "GPU Memory Usage")
+                 ?? (VramUsedMb(s) is { } used && VramFreeMb(s) is { } free && used + free > 0
+                     ? used * 100 / (used + free)
+                     : null),
+            _ => new MetricInfo(MetricFormat.Percent, 0, 100)),
+        new(VramUsed,
+            s => VramUsedMb(s),
+            _ => new MetricInfo(MetricFormat.Megabytes, 0, 0)),
+        new(VramFree,
+            s => VramFreeMb(s),
+            _ => new MetricInfo(MetricFormat.Megabytes, 0, 0)),
+
+        // The charge level of a battery. Absent on desktops, so the battery page is skipped there.
+        new(BatteryLevel,
+            s => Named(s.Where(x => x.Unit == "%"), "Charge Level"),
+            _ => new MetricInfo(MetricFormat.Percent, 0, 100))
     ];
 
     private static string Label(HwInfoSensor sensor) => SensorMetrics.Label(sensor);
@@ -124,6 +157,47 @@ internal static partial class PageMetrics
             return [];
 
         return sensors.Where(s => s.SensorId == gpu.Id && s.SensorInstance == gpu.Instance && s.Type == type).ToList();
+    }
+
+    private static double? CpuPackagePower(IReadOnlyList<HwInfoSensor> sensors) =>
+        Named(Of(sensors, Components.Cpu, HwInfoReadingType.Power), "CPU Package Power")
+        ?? Named(Of(sensors, Components.Cpu, HwInfoReadingType.Power), "CPU PPT");
+
+    /// <summary>The power of the whole card: "GPU Power" on NVIDIA and Intel, the board power on AMD
+    /// (its ASIC power when the board's is not reported). Other rails and "% of TDP" readings are left out.</summary>
+    private static double? GpuBoardPower(IReadOnlyList<HwInfoSensor> sensors)
+    {
+        List<HwInfoSensor> watts = OfGpu(sensors, HwInfoReadingType.Power).Where(s => s.Unit == "W").ToList();
+        return Named(watts, "GPU Power") ?? Named(watts, "Total Board Power (TBP)")
+               ?? Named(watts, "GPU ASIC Power") ?? Named(watts, "GPU PPT");
+    }
+
+    /// <summary>The primary GPU's readings in one of <paramref name="units"/>, whatever their reading type.</summary>
+    private static List<HwInfoSensor> OfGpuUnit(IReadOnlyList<HwInfoSensor> sensors, params string[] units)
+    {
+        if (Components.PrimaryGpu(sensors) is not { } gpu)
+            return [];
+
+        return sensors.Where(s => s.SensorId == gpu.Id && s.SensorInstance == gpu.Instance && units.Contains(s.Unit))
+            .ToList();
+    }
+
+    private static double? VramUsedMb(IReadOnlyList<HwInfoSensor> sensors)
+    {
+        List<HwInfoSensor> sizes = OfGpuUnit(sensors, "MB", "GB");
+        return Named(sizes, "GPU Memory Allocated") ?? Named(sizes, "GPU Memory Used")
+               ?? Named(sizes, "GPU Memory Usage") ?? Named(sizes, "GPU D3D Memory Dedicated");
+    }
+
+    /// <summary>VRAM available in MB: HWiNFO's own reading, else derived from the used MB and %.</summary>
+    private static double? VramFreeMb(IReadOnlyList<HwInfoSensor> sensors)
+    {
+        if (Named(OfGpuUnit(sensors, "MB", "GB"), "GPU Memory Available") is { } available)
+            return available;
+
+        return VramUsedMb(sensors) is { } used && Named(OfGpuUnit(sensors, "%"), "GPU Memory Usage") is > 0 and var percent
+            ? Math.Max(0, (used * 100 / percent) - used)
+            : null;
     }
 
     /// <summary>A fan named for the CPU, else the pump of a water cooler, else the first mainboard fan.</summary>
