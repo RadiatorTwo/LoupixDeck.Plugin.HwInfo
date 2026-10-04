@@ -97,6 +97,7 @@ public sealed class HwInfoService : IDisposable
 
     private volatile IReadOnlyList<HwInfoSensor> _sensors = Array.Empty<HwInfoSensor>();
     private volatile HwInfoDiagnostics _diagnostics = new("Not started", []);
+    private volatile HwInfoDiagnostics? _lastError;
 
     public IReadOnlyList<HwInfoSensor> Sensors => _sensors;
     public bool IsAvailable => _accessor != null;
@@ -104,6 +105,9 @@ public sealed class HwInfoService : IDisposable
 
     /// <summary>The status as a format string and its arguments, so the host can translate it.</summary>
     public HwInfoDiagnostics Status => _diagnostics;
+
+    /// <summary>The most recent problem, kept after the status has moved on; null if none yet.</summary>
+    public HwInfoDiagnostics? LastError => _lastError;
 
     public event Action? SnapshotUpdated;
 
@@ -116,10 +120,24 @@ public sealed class HwInfoService : IDisposable
         SnapshotUpdated?.Invoke();
     }
 
+    /// <summary>Records a problem as <see cref="LastError"/>. A check that fails on every poll
+    /// reports it once, not four times a second.</summary>
+    private void SetError(string format, params object[] args)
+    {
+        HwInfoDiagnostics error = new(format, args);
+        if (_lastError?.Text == error.Text)
+            return;
+        _lastError = error;
+        Console.WriteLine($"HwInfoService: {error.Text}");
+    }
+
     public void Start()
     {
         if (!OperatingSystem.IsWindows())
+        {
+            SetDiagnostics(WindowsOnly);
             return;
+        }
         if (_pollTask != null)
             return;
 
@@ -148,7 +166,6 @@ public sealed class HwInfoService : IDisposable
             {
                 if (!TryOpen())
                 {
-                    SetDiagnostics("Shared memory not found — enable 'Shared Memory Support' in HWiNFO.");
                     try { await Task.Delay(ReconnectDelay, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { return; }
                     continue;
@@ -168,14 +185,15 @@ public sealed class HwInfoService : IDisposable
                 else if (Environment.TickCount64 - _lastChangeTicks > StaleAfter.TotalMilliseconds)
                 {
                     SetDiagnostics("No new data from HWiNFO — reconnecting.");
+                    SetError("No new data from HWiNFO for {0} s.", (int)StaleAfter.TotalSeconds);
                     Close();
                     continue;
                 }
             }
             catch (Exception ex)
             {
-                SetDiagnostics("Snapshot failed ({0}: {1}).", ex.GetType().Name, ex.Message);
-                Console.WriteLine($"HwInfoService: snapshot failed, will reconnect ({ex}).");
+                SetDiagnostics("Reading failed — reconnecting.");
+                SetError("Snapshot failed ({0}: {1}).", ex.GetType().Name, ex.Message);
                 Close();
             }
 
@@ -191,14 +209,35 @@ public sealed class HwInfoService : IDisposable
             _mmf = MemoryMappedFile.OpenExisting(MappingName, MemoryMappedFileRights.Read);
             // Length 0 maps the entire shared-memory region.
             _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            SetDiagnostics("Connected — waiting for data.");
             return true;
         }
-        catch
+        catch (FileNotFoundException)
         {
-            Close();
-            return false;
+            // No mapping: HWiNFO is not running, or runs with its shared memory turned off.
+            SetDiagnostics(SharedMemoryMissing);
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetDiagnostics(AccessDenied);
+            SetError("Access denied ({0}).", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetDiagnostics(CannotOpen);
+            SetError("Opening failed ({0}: {1}).", ex.GetType().Name, ex.Message);
+        }
+
+        Close();
+        return false;
     }
+
+    // Why the shared memory cannot be opened; English keys of the plugin's strings files.
+    private const string WindowsOnly = "HWiNFO is only available on Windows.";
+    private const string SharedMemoryMissing = "Shared memory not found — enable 'Shared Memory Support' in HWiNFO.";
+    private const string AccessDenied =
+        "Access to HWiNFO's shared memory was denied — start LoupixDeck with the same rights as HWiNFO.";
+    private const string CannotOpen = "Cannot open HWiNFO's shared memory — retrying.";
 
     private void Close()
     {
@@ -232,6 +271,7 @@ public sealed class HwInfoService : IDisposable
             if (signature != ValidSignature)
             {
                 SetDiagnostics("Bad signature 0x{0:X8} (expected 0x{1:X8}).", signature, ValidSignature);
+                SetError("Bad signature 0x{0:X8} (expected 0x{1:X8}).", signature, ValidSignature);
                 return false;
             }
 
@@ -253,17 +293,20 @@ public sealed class HwInfoService : IDisposable
                 readingElemSize < ReadingUnitOffset + ReadingUnitLen + 32)
             {
                 SetDiagnostics("Unexpected element size — {0}", headerInfo);
+                SetError("Unexpected element size — {0}", headerInfo);
                 return false;
             }
             if (sensorCount is < 0 or > MaxElements || readingCount is < 0 or > MaxElements)
             {
                 SetDiagnostics("Element count out of range — {0}", headerInfo);
+                SetError("Element count out of range — {0}", headerInfo);
                 return false;
             }
             if (sensorOffset + (long)sensorCount * sensorElemSize > capacity ||
                 readingOffset + (long)readingCount * readingElemSize > capacity)
             {
                 SetDiagnostics("Section exceeds mapping — {0}", headerInfo);
+                SetError("Section exceeds mapping — {0}", headerInfo);
                 return false;
             }
 

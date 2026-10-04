@@ -158,8 +158,10 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
             Label = "Show Status",
             Invoke = () =>
             {
-                HwInfoDiagnostics status = _service.Status;
-                return Task.FromResult(string.Format(Tr(status.Format), status.Args));
+                string text = Tr(_service.Status);
+                if (_service.LastError is { } error)
+                    text += "\n" + string.Format(Tr("Last error: {0}"), Tr(error));
+                return Task.FromResult(text);
             }
         }
     ];
@@ -179,6 +181,8 @@ public sealed class HwInfoPlugin : LoupixPlugin, IMenuContributor, IPluginSettin
             return english;
         }
     }
+
+    private string Tr(HwInfoDiagnostics diagnostics) => string.Format(Tr(diagnostics.Format), diagnostics.Args);
 
     // Kept out of line: the JIT resolves IPluginHost.Tr when it compiles this method, which throws
     // on a host without it — inside Tr's try block rather than in its caller.

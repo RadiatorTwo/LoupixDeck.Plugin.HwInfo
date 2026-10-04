@@ -56,5 +56,15 @@
   "Unexpected element size — {0}": "Tamaño de elemento inesperado — {0}",
   "Element count out of range — {0}": "Número de elementos fuera de rango — {0}",
   "Section exceeds mapping — {0}": "La sección excede la memoria asignada — {0}",
-  "OK — {0} readings, {1} sensors ({2}).": "OK — {0} lecturas, {1} sensores ({2})."
+  "OK — {0} readings, {1} sensors ({2}).": "OK — {0} lecturas, {1} sensores ({2}).",
+
+  "HWiNFO is only available on Windows.": "HWiNFO solo está disponible en Windows.",
+  "Connected — waiting for data.": "Conectado — esperando datos.",
+  "Access to HWiNFO's shared memory was denied — start LoupixDeck with the same rights as HWiNFO.": "Se denegó el acceso a la memoria compartida de HWiNFO — inicia LoupixDeck con los mismos permisos que HWiNFO.",
+  "Cannot open HWiNFO's shared memory — retrying.": "No se puede abrir la memoria compartida de HWiNFO — reintentando.",
+  "Reading failed — reconnecting.": "Error de lectura — reconectando.",
+  "No new data from HWiNFO for {0} s.": "Sin datos nuevos de HWiNFO desde hace {0} s.",
+  "Access denied ({0}).": "Acceso denegado ({0}).",
+  "Opening failed ({0}: {1}).": "Error al abrir ({0}: {1}).",
+  "Last error: {0}": "Último error: {0}"
 }
