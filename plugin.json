@@ -1,7 +1,7 @@
 {
   "id": "hwinfo",
   "name": "HWiNFO",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "sdkVersion": "1.28",
   "entryAssembly": "LoupixDeck.Plugin.HwInfo.dll",
   "platform": "Windows",
