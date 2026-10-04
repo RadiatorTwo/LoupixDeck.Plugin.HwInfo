@@ -15,6 +15,11 @@ Both commands draw pixel tiles (5×7 bitmap font, no anti-aliasing) with a gauge
 **CPU TjMax** setting, GPU core, drives, RAM load, a stalled fan while its temperature is high).
 The **Transparent background** setting lets the page wallpaper show through.
 
+Settings: transparent background, the CPU's TjMax (CPU temperature turns amber at
+TjMax − 15 °C and red at TjMax − 5 °C), temperatures in °F instead of °C (display only), and
+the alert limits: GPU 80/88 °C, drives 55/65 °C, RAM load 85/95 % (warning/critical) and a
+stalled fan below 200 RPM by default.
+
 - `HwInfo.Sensor` — one reading per command. Chain up to four on one button for a multi-row
   tile. Readings are offered as a live menu sorted by component (CPU, GPU, Memory, Storage,
   Mainboard, Network, Other), device and quantity, named after HWiNFO's English labels whatever

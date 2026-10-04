@@ -73,5 +73,18 @@
 
   "Power page": "Leistungs-Seite",
   "VRAM page": "VRAM-Seite",
-  "Battery page": "Akku-Seite"
+  "Battery page": "Akku-Seite",
+
+  "Show temperatures in °F": "Temperaturen in °F anzeigen",
+  "Show temperatures in degrees Fahrenheit. The alert limits below stay in °C.": "Temperaturen in Grad Fahrenheit anzeigen. Die Alarmgrenzen unten bleiben in °C.",
+  "Alert limits": "Alarmgrenzen",
+  "A reading turns amber at its warning limit and red at its critical limit.": "Ein Wert wird an seiner Warngrenze gelb und an seiner kritischen Grenze rot.",
+  "GPU warning (°C)": "GPU Warnung (°C)",
+  "GPU critical (°C)": "GPU kritisch (°C)",
+  "Drive warning (°C)": "Laufwerk Warnung (°C)",
+  "Drive critical (°C)": "Laufwerk kritisch (°C)",
+  "RAM load warning (%)": "RAM-Auslastung Warnung (%)",
+  "RAM load critical (%)": "RAM-Auslastung kritisch (%)",
+  "Fan stalled below (RPM)": "Lüfter steht unter (U/min)",
+  "A CPU or GPU fan slower than this turns red while the temperature it cools is at its warning or critical limit.": "Ein CPU- oder GPU-Lüfter, der langsamer dreht, wird rot, solange die Temperatur, die er kühlt, an ihrer Warn- oder kritischen Grenze ist."
 }

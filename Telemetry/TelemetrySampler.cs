@@ -95,8 +95,12 @@ internal sealed class TelemetrySampler(HwInfoService service, Func<TelemetrySett
 
             double[] history = track.ToArray();
             double max = info.GrowToPeak ? Math.Max(info.Max, Peak(history)) : info.Max;
+            // Only the text changes with the unit; value, history, bar and limits stay in °C.
+            MetricFormat format = settings.Fahrenheit && info.Format == MetricFormat.Temperature
+                ? MetricFormat.TemperatureFahrenheit
+                : info.Format;
             metrics[key] = new MetricSnapshot(smoothed, track.State, history, info.Min, max,
-                Thresholds.LimitsFor(info.Threshold, settings)?.Warn, info.Format, info.Unit);
+                Thresholds.LimitsFor(info.Threshold, settings)?.Warn, format, info.Unit);
         }
 
         // A metric that vanished (sensor or hardware gone in HWiNFO) keeps a gap in its chart and is dropped
